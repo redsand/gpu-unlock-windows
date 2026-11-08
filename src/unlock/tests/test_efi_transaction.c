@@ -6,8 +6,14 @@
 #include <string.h>
 #include <stdarg.h>
 #include <malloc.h>
+#if defined(__MINGW32__) || defined(__MINGW64__)
+/* msvcrt-based MinGW lacks C11 aligned_alloc; use the mingw runtime helper. */
+#define _aligned_malloc(n,a) __mingw_aligned_malloc(n,a)
+#define _aligned_free(p) __mingw_aligned_free(p)
+#else
 #define _aligned_malloc(n,a) aligned_alloc(a,n)
 #define _aligned_free(p) free(p)
+#endif
 #undef EPROTO
 #undef EBADMSG
 #undef EOVERFLOW
