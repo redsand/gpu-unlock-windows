@@ -16,6 +16,8 @@ from pathlib import Path
 
 IMAGE_SHA = '7cdc788c0732c64d655349bda821e78a3ebb0155324a9f439cc1714ccd8a8a85'
 BODY_SHA = '4389ebbf6a829ed3bbeed4d3898d82cc80f395d1e9be8ccbac191c38d3429d9b'
+# Pinned in ASSETS-MANIFEST.json and unlock/app_io.c; the EFI re-verifies it at load.
+PINNED_PAYLOAD_SHA = '44c36b2d6b3424e53e18f3e55db85c833655de071ce66ce42749588a4a7dc8cb'
 SIZE, DMEM_BASE, CANARY, MARKER = 0xfa00, 0x600, 0x19c, 0x67b00001
 TARGETS = [(0x1fa7cc,0xfffff0ff),(0x9a0148,0xffffffff),(0x1fa7c4,0xffffffff),(0x823804,0xffffffff)]
 
@@ -161,12 +163,37 @@ def audit(image, disasm):
             'success_cases':cases,'negative_cases':['canary corruption stops before BAR write','I/O error prevents normal marker','ignored BAR write can still yield marker; runtime readback required'],
             'limitations':['Debug/production code equality not established','No BROM/authentication/HS or DMA model','Inherited D[0x1700]=7 semantics not fully known','Cleanup-tail entry bypasses earlier stock crypto-state restoration; no stock-teardown equivalence claimed','Post-DMA path only; all physical outcomes remain unverified']}
 
+def verify_pinned_payload() -> bytes:
+    data = payload()
+    if sha(data) != PINNED_PAYLOAD_SHA:
+        raise SystemExit('generated V67 image differs from its pinned SHA-256')
+    return data
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('image',type=Path);p.add_argument('disasm',type=Path);p.add_argument('output',type=Path)
-    a=p.parse_args();report=audit(a.image.read_bytes(),a.disasm)
+    p.add_argument('image',type=Path,nargs='?',
+                   help='optional AD102 debug plaintext image; recorded in the report for provenance')
+    p.add_argument('disasm',type=Path,nargs='?',
+                   help='optional envytools disassembly of the debug plaintext; '
+                        'when given the full bounded-interpreter audit runs (image required), '
+                        'otherwise the payload is verified against the pinned SHA-256 only')
+    p.add_argument('output',type=Path)
+    a=p.parse_args()
+    if a.disasm is not None and a.image is None:
+        raise SystemExit('a disassembly audit requires the debug plaintext image argument')
+    if a.disasm is not None:
+        report=audit(a.image.read_bytes(),a.disasm)
+        data=verify_pinned_payload()
+    else:
+        data=verify_pinned_payload()
+        report={'scope':'Regeneration without disassembly: byte-identity to the audited artifact '
+                        'is established by the pinned SHA-256 (ASSETS-MANIFEST.json, unlock/app_io.c). '
+                        'The bounded interpreter audit was skipped: no disassembly provided.',
+                'plaintext_sha256':sha(a.image.read_bytes()) if a.image else None,
+                'payload_bytes':SIZE,'payload_sha256':sha(data),
+                'audit':'skipped (no disassembly provided)'}
     a.output.mkdir(parents=True,exist_ok=True)
-    (a.output/'v67-ad102-610.43.03-four-plm.bin').write_bytes(payload())
+    (a.output/'v67-ad102-610.43.03-four-plm.bin').write_bytes(data)
     (a.output/'ad102-payload-audit.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 if __name__=='__main__':main()

@@ -10,6 +10,7 @@ def run(*a):subprocess.run([sys.executable,*map(str,a)],check=True)
 run(f/'fetch_artifacts.py',cache)
 run(f/'generate_v67.py',cache/entries[2]['filename'],out)
 run(f/'extract_boot_assets.py',cache/entries[0]['filename'],out,'--arch','ad102','--gsp',out/'gsp_ga10x.bin')
+run(f/'ad102_payload.py',out/'AD102-DEBUG-CANDIDATE-PLAINTEXT.bin',out)
 (out/'v67-ga102-610.43.03.bin').unlink(missing_ok=True)
 import hashlib
 spec=json.loads((r/'ASSETS-MANIFEST.json').read_text())
